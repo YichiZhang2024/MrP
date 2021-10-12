@@ -1,0 +1,8 @@
+Descriptive analysis:
+1. geolocation (Yichi)
+2. number of tweets from the same user per day week month 
+3. number of users. number of tweets per users (Yichi)
+4. word frequency
+5. gender, race, smoking, diabetes, obese, poorhealth, for county level (Yichi)
+for each covariate, the number of users and number of tweets of each level
+6. heart disease outcome

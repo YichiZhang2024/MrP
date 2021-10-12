@@ -1,28 +1,204 @@
 ---
-title: "Demo"
+title: "Demographic analysis of Eichstaedt et al (2015) dataset"
 output: html_document
 ---
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
+library(ggplot2)
+library(pastecs)
+library(QuantPsyc)
+library(data.table)
+library(bitops)
+library(lsr)       #not called directly, but needed for cohensD()
+library(psych) 
 ```
 
-## R Markdown
+```{r}
+# Read in the basic county data from the original, untouched study file
+county <- read.csv("heart disease data/countyoutcomes.csv", stringsAsFactors=FALSE)
 
-This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
-
-When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
-
-```{r cars}
-summary(cars)
+# Cleanups
+for (i in c(16, 17, 18)) {
+  county[,i] <- as.integer(gsub("NULL", NA, county[,i]))	#file contains NULL values which became NULL strings
+}
 ```
 
-## Including Plots
-
-You can also embed plots, for example:
-
-```{r pressure, echo=FALSE}
-plot(pressure)
+```{r}
+# Give some of the variables names that are easier to type
+names(county)[4] <- "female"
+names(county)[5] <- "hispanic"
+names(county)[6] <- "black"
+names(county)[7] <- "foreignborn"
+names(county)[8] <- "married_male"
+names(county)[9] <- "married_female"
+names(county)[10] <- "highschool"
+names(county)[11] <- "bachelors"
+names(county)[12] <- "rawincome"
+names(county)[13] <- "smoker"
+names(county)[14] <- "diabetic"
+names(county)[15] <- "obese"
+names(county)[16] <- "fairpoorhealth"
+names(county)[17] <- "sickdays_physical"
+names(county)[18] <- "sickdays_mental"
+names(county)[19] <- "hypertension_male"
+names(county)[20] <- "hypertension_female"
+names(county)[21] <- "education"
+names(county)[22] <- "hypertension" 	#this appears to be an unweighted average of the male and female hypertension rates
+names(county)[23] <- "married"	     	#this appears to be an unweighted average of the male and female marriage rates
+names(county)[24] <- "income"	       	#logarithmic
+names(county)[25] <- "mortality"	    #from AHD
+names(county)[28] <- "gini"
+names(county)[29] <- "unemployment"
 ```
 
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+```{r}
+# Read in the county median age data - skip first line ("second header") and unnecessary columns.
+census_age <- read.csv("heart disease data/census_age.csv", stringsAsFactors=FALSE, colClasses=c("NULL", "character", "NULL", "character", rep("NULL", 2)))[-1,]
+for (i in 1:ncol(census_age)) {
+  census_age[,i] <- as.numeric(census_age[,i])
+}
+names(census_age) <- c("fips", "median_age")
+county <- merge(county, census_age, by="fips", all.x=TRUE)
+
+# Read in the county geographical data - skip unnecessary columns.
+census_geo <- read.delim("heart disease data/Gaz_counties_national.txt", colClasses=c("NULL", "numeric", rep("NULL", 3), "numeric", rep("NULL", 2), "numeric", "NULL", rep("numeric", 2)))
+names(census_geo) <- c("fips", "homes", "landarea", "latitude", "longitude")
+county <- merge(county, census_geo, by="fips", all.x=TRUE)
+# List of causes of death for which we obtained 2009-2010 CDC data.
+# Source: http://wonder.cdc.gov/ucd-icd10.html
+# "AHD" means "I25.1 (Atherosclerotic heart disease)", as used by Eichstaedt et al.
+# "assault" means "X85-Y09 (Assault)"
+# "cancer" means "C00-C97 (Neoplasms)"
+# "otherheart" means I20-I51, excluding I25.1, i.e. all other heart disease.
+# "respiratory" means "J00-J98 (Diseases of the respiratory system)"
+# "selfharm" means "X60-X84 (Intentional self-harm)"
+# "stroke" means "I60-I69 (Cerebrovascular diseases)"
+causes <- c("AHD", "all", "assault", "cancer", "otherheart", "respiratory", "selfharm", "stroke")
+```
+
+```{r}
+# Read in all specific cause of death files and merge into county data.
+cat("Reading causes of death...")
+for (i in 1:length(causes)) {
+  cause <- causes[i]
+  county_filename <- paste("heart disease data/cause_", cause, ".aa.txt", sep="")
+  cat("file", county_filename, "...")
+# column 1 = county number, column 2 = age-adjusted death rate
+  deaths <- read.delim(county_filename, header=FALSE)
+  names(deaths) <- c("fips", cause)
+  county <- merge(county, deaths, by="fips", all.x=TRUE)
+}
+cat(" done\n")
+
+# Sanity check: "AHD" from our files (constructed from CDC data) should match "mortality" from Eichstaedt et al.'s file.
+if (abs(max(county$AHD - county$mortality)) > 0.00001) {
+  stop("Reproduction AHD data does not match original")
+}
+
+all_controls <- c("income", "education", "female", "hispanic", "black", "married", "obese", "hypertension", "smoker", "diabetic")
+```
+
+```{r}
+# Read in the word data, cf. the Results/Dictionaries subsection of Eichstaedt et al.
+theme_names <- c("Anger", "Anxiety", "NegEmotions", "NegEngagement", "NegEngNoTired", "NegRelations", "NegRelNoHate", "PosEmotions", "PosEngagement", "PosRelations", "PosRelNoLove")
+
+# Read theme data.
+
+if (! exists("read_themes")) {
+  read_themes = TRUE
+}
+
+if (read_themes) {
+  cat("Reading Twitter word themes... ")
+
+  if (setup_build_themes) {
+    themes <- unique(county["fips"])
+
+    for (i in 1:length(theme_names)) {
+      theme_name <- theme_names[i]
+
+      filename <- paste("theme", theme_name, ".csv.gz", sep="")
+      words <- read.csv(filename, header=FALSE)[,1:4]
+      names(words) <- c("fips", "word", "count", "freq")
+      cat("Reading file ", filename, "... ", sep="")
+
+      fipslist <- unique(words["fips"])
+      for (j in 1:length(fipslist$fips)) {
+        f <- fipslist$fips[j]
+        s <- sum(words[words$fips==f,]$freq)
+        themes[themes$fips==f ,theme_name] <- s
+      }
+    }
+  } else {
+    themes <- read.delim("themes.txt", header=TRUE)
+  }
+
+  read_themes = FALSE
+  cat(" done\n")
+}
+
+cat("Merging Twitter themes...")
+county <- merge(county, themes, by="fips", all.x=TRUE)
+cat(" done\n")
+```
+
+
+```{r}
+# Read topic data.
+if (! exists("read_topics")) {
+  read_topics = TRUE
+}
+
+if (read_topics) {
+  cat("Reading Twitter topics...")
+
+  if (setup_build_topics) {
+    rawtopics <- read.csv("../county.freqs.topics.csv.gz", colClasses=c("NULL", rep("character", 2), "NULL", "character", "NULL"))[-1,]
+    names(rawtopics) <- c("fips", "topic_number", "topic_weight")
+    for (i in 1:ncol(rawtopics)) {
+      rawtopics[,i] <- as.numeric(rawtopics[,i])
+    }
+
+    cat(" done\n")
+    cat("Combining topics...")
+
+    n_topics <- length(unique(rawtopics$topic_number))
+    topics <- unique(county["fips"])
+    for (i in 1:n_topics) {
+      if (i %% 20 == 0) {
+        cat(" ", i)
+      }
+
+      t <- i - 1
+      topic_t <- rawtopics[rawtopics$topic_number == t,][c(1,3)]
+      topic_name <- paste("topic_", t, sep="")
+      names(topic_t)[2] <- topic_name
+      topics <- merge(topics, topic_t, by="fips", all.x=TRUE)
+    }
+  }
+  else {
+    topics <- read.delim("topics.txt.gz", stringsAsFactors=FALSE, header=TRUE)
+  }
+
+  read_topics = FALSE
+  cat(" done\n")
+}
+
+cat("Merging Twitter topics...")
+county <- merge(county, topics, by="fips", all.x=TRUE)
+cat(" done\n")
+```
+
+```{r}
+# Build our own ratio-based variables.
+county$pop_density <- county$pop2010 / county$landarea
+county$home_density <- county$homes / county$landarea
+```
+
+```{r}
+describe.by(county[1:30], county$gender)
+county %>%
+  groupby(county$county)
+```
+
