@@ -9,6 +9,7 @@ library(tidyverse)
 library(psych)
 library(tm)
 library(SnowballC)
+library(dplyr)
 ```
 
 ```{r}
@@ -17,20 +18,22 @@ tweet0320 <-read.csv(here::here("tweetID02_2155.csv"))
 head(tweet0320)
 ## select relevant variables
 tweet <- tweet0320 %>%
-  select("user_id","user_location", "text")
+  select("user_id","user_location", "text", "hashtags")
 ```
 
 ```{r}
 ## Total number of tweets per location
 tweet %>%
   group_by(user_location) %>%
-  summarise(count = n())
+  summarise(count = n()) %>%
+  ungroup()
 ## unique id
 length(unique(tweet$user_id))
 ## Total number of tweets per unique ID
 tweet %>%
   group_by(user_id) %>%
-  summarise(count = n())
+  summarise(count = n())%>%
+  ungroup()
 ```
 
 
@@ -75,13 +78,24 @@ Text_dtm <- DocumentTermMatrix(Text)
 sparse_dtm <- removeSparseTerms(Text_dtm, 0.995)
 sparse_w <- weightBin(sparse_dtm)
 sparse_w <- as.data.frame(as.matrix(sparse_w))
-sparse_data <- lapply(sparse_w, factor)
-sparse_data <- as.data.frame(sparse_data)
-sparse_data_rm <- sparse_data[,-(1:22)]
+sparse_rm <- lapply(sparse_w, factor)
+sparse_rm <- as.data.frame(sparse_rm)
+word_ct <- sparse_rm[,-(1:22)]
+tweet_dat<- cbind(tweet,word_ct)
 ```
 
 
 ```{r}
+demo_dat <- readRDS("~/R/MrP/hydrate_2155_with_demo.rds")
+full_dat <- left_join(demo_dat,tweet_dat, by= c("user_id", "text"))
+# full_dat$user_loc_county <- as_factor(full_dat$user_loc_county)
+full_dat %>%
+  as.data.frame()%>%
+  group_by("gender_label") %>%
+  summarise(count = n()) 
+  # arrange( by = "user_id" , .by_group = TRUE)
+full_dat %>%
+  count("user_loc_county",)
 ```
 
 
