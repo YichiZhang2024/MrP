@@ -1,0 +1,31 @@
+---
+title: "equation"
+author: "Yichi Zhang"
+date: "10/28/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Level 1:
+$$
+\text{count}_{ijk} \sim \text{Poisson}(\mu_{ijk})\\
+\eta_{ijk} = \text{log}(\mu_{ijk})\\
+\eta_{ijk} = \beta_{0jk} + e_{ijk} + \ln(\text{tweet}_{ijk})
+$$
+
+Level 2:
+
+$$
+\beta_{0jk} = \gamma_{00k} + \gamma_{01k}\text{gender}_{jk} + u_{0jk}
+$$
+<!-- u_{0jk} \sim N (0, \tau_0^2) -->
+Level 3:
+
+$$
+\gamma_{00k} = \delta_{000} + v_{00k}\\
+\gamma_{01k} = \delta_{010} + v_{01k} \\
+$$
+<!-- \begin{pmatrix} v_{00k} \\ v_{01k} \end {pmatrix} \sim N \begin{pmatrix} \begin{bmatrix} 0 \\ 0 \end {bmatrix},\begin{bmatrix} \tau_{0}^2 \ \tau_{01}\\\tau_{01} \ \tau_{1}^2 \end {bmatrix} \end{pmatrix} -->
