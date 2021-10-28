@@ -1,0 +1,96 @@
+---
+title: "Word Freq 03/20/20"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(psych)
+library(tm)
+library(SnowballC)
+```
+
+```{r}
+## read files
+tweet0320 <-read.csv(here::here("tweetID02_2155.csv"))
+head(tweet0320)
+## select relevant variables
+tweet <- tweet0320 %>%
+  select("user_id","user_location", "text")
+```
+
+```{r}
+## Total number of tweets per location
+tweet %>%
+  group_by(user_location) %>%
+  summarise(count = n())
+## unique id
+length(unique(tweet$user_id))
+## Total number of tweets per unique ID
+tweet %>%
+  group_by(user_id) %>%
+  summarise(count = n())
+```
+
+
+```{r}
+# Clean the tweet, reduce to the word seed
+text <- tweet$text
+text <- str_replace_all(string=text, pattern= "[&â€¦™ðŸ¥]" , replacement= "")
+txt <- VCorpus(VectorSource(text))
+removeURL <- content_transformer(function(x) gsub("(f|ht)tp(s?)://\\S+", " ", x, perl = T))
+Text <- tm_map(txt, removeURL)
+removename <- content_transformer(function(x) gsub("RT @[a-z, A-Z]*:", " ", x, perl = T))
+Text <- tm_map(Text, removename)
+removeother <- content_transformer(function(x) gsub("@[a-z, A-Z]*", " ", x, perl = T))
+Text <- tm_map(Text, removeother)
+removetag <- content_transformer(function(x) gsub("#[a-z, A-Z]*", " ", x, perl = T))
+Text <- tm_map(Text, removetag)
+# removechar <- content_transformer(function(x) gsub("a-z, A-Z*", " ", x, perl = T))
+# Text <- tm_map(Text, removechar)
+addSpace <- content_transformer(function(x, pattern) gsub(pattern, " ", x))
+Text <- tm_map(Text, addSpace, "/")
+Text <- tm_map(Text, addSpace, "\\|")
+Text <- tm_map(Text, removeNumbers)
+Text <- tm_map(Text, removeWords, stopwords("english"))
+Text <- tm_map(Text, removePunctuation)
+Text <- tm_map(Text, stripWhitespace)
+Text <- tm_map(Text, content_transformer(tolower))
+Text <- tm_map(Text, stemDocument)
+# check the cleaning result by checking the fifth tweet
+writeLines(as.character(Text[[5]]))
+Text_dtm <- DocumentTermMatrix(Text)
+# m <- as.matrix(Text_dtm)
+# v <- sort(rowSums(m),decreasing=TRUE)
+# d <- data.frame(word=names(v), freq=v)
+# head(d, 25)
+# d25<- d[1:25,]
+# print(d25)
+```
+
+
+```{r}
+# remove some sparse terms (the last 5%)
+sparse_dtm <- removeSparseTerms(Text_dtm, 0.995)
+sparse_w <- weightBin(sparse_dtm)
+sparse_w <- as.data.frame(as.matrix(sparse_w))
+sparse_data <- lapply(sparse_w, factor)
+sparse_data <- as.data.frame(sparse_data)
+sparse_data_rm <- sparse_data[,-(1:22)]
+```
+
+
+```{r}
+```
+
+
+```{r}
+```
+
+
+```{r}
+```
+
+```{r}
+```
